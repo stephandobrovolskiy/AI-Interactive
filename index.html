@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="color-scheme" content="dark" />
+    <meta name="theme-color" content="#070a10" />
+    <title>Interactive Film</title>
+    <style>
+      /* The host page. Deliberately plain: the stage is the only object on it. */
+      html,
+      body {
+        margin: 0;
+        height: 100%;
+        background: #070a10;
+        overscroll-behavior: none;
+      }
+      body {
+        height: 100dvh;
+      }
+      interactive-film {
+        display: block;
+        width: 100%;
+        height: 100%;
+      }
+    </style>
+  </head>
+  <body>
+    <interactive-film
+      poster="cover.jpg"
+      blur="cover-blur.jpg"
+      episode="Episode 1"
+      video="menu-web.mp4"
+      music="menu.mp3"
+    ></interactive-film>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

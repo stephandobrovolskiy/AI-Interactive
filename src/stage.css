@@ -1,0 +1,1574 @@
+/* Styles live inside the component's shadow root: nothing leaks in or out. */
+
+:host {
+  /* Tokens. Host pages may override these on the element. */
+  --if-ground: #070a10;
+  --if-stage: #0c1118;
+  --if-gold: #d4af37;
+  --if-gold-soft: #e6c86a;
+  --if-ink: #f2ecdc;
+  --if-ink-dim: rgb(242 236 220 / 0.72);
+  --if-hairline: rgb(212 175 55 / 0.36);
+  --if-radius: 8px;
+  --if-display: "Bricolage Grotesque", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --if-ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+  --if-ease-in-out: cubic-bezier(0.77, 0, 0.175, 1);
+
+  /* Safe-area insets exposed for on-stage UI. */
+  --if-safe-top: env(safe-area-inset-top, 0px);
+  --if-safe-right: env(safe-area-inset-right, 0px);
+  --if-safe-bottom: env(safe-area-inset-bottom, 0px);
+  --if-safe-left: env(safe-area-inset-left, 0px);
+
+  display: block;
+  position: relative;
+  box-sizing: border-box;
+  width: 100%;
+  height: 100%;
+  background: var(--if-ground);
+  color: var(--if-ink);
+  font: 400 16px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif;
+  -webkit-font-smoothing: antialiased;
+  overflow: hidden;
+  contain: layout paint style;
+  isolation: isolate;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+:host([hidden]) {
+  display: none;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+/* Page-level vignette: the ground fades into the stage rather than meeting it flat. */
+.ground {
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(
+      ellipse 70% 90% at 50% 50%,
+      rgb(20 28 40 / 0.55) 0%,
+      rgb(7 10 16 / 0) 70%
+    ),
+    var(--if-ground);
+}
+
+/* Centers the stage and hands it the largest 9:16 box that fits. */
+.well {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: clamp(16px, 3vh, 40px);
+}
+
+/* The stage: a portrait window. Locked to 9:16 in every layout. */
+.stage {
+  position: relative;
+  aspect-ratio: 9 / 16;
+  height: 100%;
+  max-width: 100%;
+  max-height: 100%;
+  background: var(--if-stage);
+  border-radius: var(--if-radius);
+  overflow: hidden;
+  container-type: size;
+  box-shadow:
+    0 32px 96px -24px rgb(2 4 8 / 0.9),
+    0 8px 24px -8px rgb(2 4 8 / 0.7);
+  transform: translateZ(0);
+}
+
+/* The hairline is drawn separately so it can fade in on its own. */
+.stage::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  box-shadow: inset 0 0 0 1px var(--if-hairline);
+  opacity: 0;
+  pointer-events: none;
+  z-index: 3;
+  transition: opacity 600ms var(--if-ease-out);
+}
+
+:host([data-ready]) .stage::after {
+  opacity: 1;
+}
+
+/* Video layer. Whatever plays covers the stage. */
+.screen {
+  position: absolute;
+  inset: 0;
+  background: var(--if-stage);
+}
+
+.screen > video,
+.screen > img {
+  position: absolute;
+  inset: 0;
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  background: var(--if-stage);
+}
+
+/* Background video is hidden until its first frame is actually painting. */
+.screen > video {
+  opacity: 0;
+  transition: opacity 200ms var(--if-ease-out);
+}
+
+.screen > video[data-playing] {
+  opacity: 1;
+}
+
+/*
+ * Scene clips cut, they do not fade. The next clip is already mounted under
+ * the current one at its first frame; when its first frame paints it is
+ * shown at once, and the clip that just ended is dropped under it.
+ */
+.screen > video[data-scene] {
+  transition: none;
+}
+
+/* Layer reserved for on-stage UI. */
+.overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  pointer-events: none;
+}
+
+/* Shared bottom-left anchor so screens hand off to each other in place. */
+.start-copy,
+.menu {
+  padding:
+    calc(7cqh + var(--if-safe-top))
+    calc(7cqw + var(--if-safe-right))
+    calc(7cqh + var(--if-safe-bottom))
+    calc(7cqw + var(--if-safe-left));
+}
+
+/* ---------------------------------------------------------------------------
+ * Start screen
+ * The poster sits sharp on the video layer. Over it, a blurred copy and a scrim.
+ * Tapping anywhere clears the blur: the world comes into focus as the game begins.
+ * ------------------------------------------------------------------------- */
+
+.start {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  grid-template-rows: 1fr auto;
+  cursor: pointer;
+  pointer-events: auto;
+  outline: none;
+  opacity: 0;
+  transition: opacity 420ms var(--if-ease-out);
+}
+
+.start[data-shown] {
+  opacity: 1;
+}
+
+.start-blur {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+}
+
+/*
+ * The blurred still is rendered ahead of time (a small pre-blurred image), so
+ * no filter runs in the browser. When no such image is given, a live filter
+ * is the fallback.
+ */
+.start-blur > img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  opacity: 1;
+  transition: opacity 800ms var(--if-ease-out);
+}
+
+.start-blur[data-live] > img {
+  transform: scale(1.15);
+  filter: blur(14px) saturate(0.9) brightness(0.85);
+}
+
+.start-scrim {
+  position: absolute;
+  inset: 0;
+  background:
+    linear-gradient(
+      to top,
+      rgb(7 10 16 / 0.92) 0%,
+      rgb(7 10 16 / 0.6) 32%,
+      rgb(7 10 16 / 0.12) 60%,
+      rgb(7 10 16 / 0) 100%
+    );
+  transition: opacity 500ms var(--if-ease-out);
+}
+
+/* Bottom-left copy block. Left aligned: it reads like a title card, not a poster. */
+.start-copy {
+  position: relative;
+  grid-row: 2;
+  display: grid;
+  gap: 6cqh;
+  padding-top: 0;
+  transition:
+    opacity 320ms var(--if-ease-out),
+    transform 320ms var(--if-ease-out);
+}
+
+/* Thin gold ring with a play mark. The ring breathes; nothing else moves. */
+.start-mark {
+  width: 15cqw;
+  height: 15cqw;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  box-shadow: inset 0 0 0 1.5px var(--if-gold);
+  background: transparent;
+  color: var(--if-gold);
+  animation: breathe 3200ms var(--if-ease-in-out) infinite;
+  transition:
+    background-color 160ms ease,
+    color 160ms ease,
+    transform 120ms var(--if-ease-out);
+}
+
+.start-mark > svg {
+  width: 38%;
+  height: 38%;
+  /* Optical centering: a triangle looks left-heavy at true center. */
+  transform: translateX(8%);
+}
+
+@keyframes breathe {
+  0%,
+  100% {
+    opacity: 0.55;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+/* Pressed: the ring fills, the mark inverts, the whole thing gives a little. */
+.start[data-pressed] .start-mark {
+  animation: none;
+  opacity: 1;
+  background: var(--if-gold);
+  color: var(--if-stage);
+  transform: scale(0.94);
+}
+
+.start-text {
+  display: grid;
+  gap: 1.2cqh;
+}
+
+.start-title {
+  margin: 0;
+  font-family: var(--if-display);
+  font-optical-sizing: auto;
+  font-size: clamp(22px, 8.5cqw, 44px);
+  line-height: 1.02;
+  font-weight: 700;
+  letter-spacing: -0.025em;
+  color: var(--if-ink);
+  text-wrap: balance;
+}
+
+.start-prompt {
+  margin: 0;
+  font-family: var(--if-display);
+  font-optical-sizing: auto;
+  font-size: clamp(13px, 4cqw, 17px);
+  line-height: 1.3;
+  font-weight: 500;
+  letter-spacing: 0.01em;
+  color: var(--if-gold-soft);
+}
+
+/* The blurred scene never moves: scaling it would expose the sharp edges. */
+.start-press {
+  position: absolute;
+  inset: 0;
+}
+
+/* Leaving: blur clears, scrim and copy fall away, then the layer is removed. */
+.start[data-leaving] {
+  cursor: default;
+  pointer-events: none;
+}
+
+.start[data-leaving] .start-blur > img {
+  opacity: 0;
+}
+
+.start[data-leaving] .start-scrim {
+  opacity: 0;
+}
+
+.start[data-leaving] .start-copy {
+  opacity: 0;
+  transform: translateY(6px);
+}
+
+.start[data-leaving] .start-mark {
+  animation: none;
+}
+
+.start:focus-visible .start-mark {
+  box-shadow:
+    inset 0 0 0 1.5px var(--if-gold),
+    0 0 0 3px rgb(212 175 55 / 0.35);
+}
+
+/* ---------------------------------------------------------------------------
+ * Main menu
+ * The background video plays on the screen layer. The menu is a short list of
+ * large words, bottom-left, in the same spot the start prompt just left.
+ * ------------------------------------------------------------------------- */
+
+.menu {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  grid-template-rows: auto 1fr auto;
+  pointer-events: auto;
+}
+
+.menu-scrim {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background:
+    linear-gradient(
+      to top,
+      rgb(7 10 16 / 0.9) 0%,
+      rgb(7 10 16 / 0.62) 30%,
+      rgb(7 10 16 / 0.18) 58%,
+      rgb(7 10 16 / 0.08) 100%
+    );
+}
+
+.menu-head {
+  position: relative;
+  grid-row: 1;
+  margin: 0;
+  font-family: var(--if-display);
+  font-optical-sizing: auto;
+  font-size: clamp(13px, 4cqw, 17px);
+  line-height: 1.3;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  color: var(--if-ink-dim);
+  opacity: 0;
+  transform: translateY(6px);
+  transition:
+    opacity 360ms var(--if-ease-out),
+    transform 360ms var(--if-ease-out);
+}
+
+.words {
+  position: relative;
+  grid-row: 3;
+  display: grid;
+  gap: 2.4cqh;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.word {
+  position: relative;
+  display: grid;
+  gap: 0.6cqh;
+  width: max-content;
+  max-width: 100%;
+  margin: 0;
+  padding: 0.6cqh 0 0.8cqh 0;
+  border: 0;
+  background: none;
+  font-family: var(--if-display);
+  font-optical-sizing: auto;
+  font-size: clamp(22px, 8cqw, 42px);
+  line-height: 1.02;
+  font-weight: 700;
+  letter-spacing: -0.025em;
+  color: var(--if-ink);
+  text-align: left;
+  cursor: pointer;
+  outline: none;
+  opacity: 0;
+  transform: translateY(10px);
+  transition:
+    color 160ms ease,
+    opacity 360ms var(--if-ease-out) calc(var(--i, 0) * 50ms),
+    transform 360ms var(--if-ease-out) calc(var(--i, 0) * 50ms);
+}
+
+.word[aria-disabled="true"] {
+  color: var(--if-ink-dim);
+  cursor: default;
+}
+
+/* Enter: items fall into place one after another. */
+[data-in] .menu-head,
+[data-in] .word {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+/* The indicator: a gold hairline that grows out from the left of the word. */
+.word::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 2px;
+  background: var(--if-gold);
+  transform: scaleX(0);
+  transform-origin: 0 50%;
+  transition: transform 220ms var(--if-ease-out);
+}
+
+.word[data-active]:not([aria-disabled="true"])::before,
+.word:focus-visible::before {
+  transform: scaleX(1);
+}
+
+.word[data-active]:not([aria-disabled="true"]),
+.word:focus-visible {
+  color: var(--if-gold-soft);
+}
+
+/* Press: the word gives, and the hairline holds. */
+.word[data-pressed] {
+  color: var(--if-gold);
+}
+
+.word-label {
+  display: inline-block;
+  transition: transform 120ms var(--if-ease-out);
+  transform-origin: 0 50%;
+}
+
+.word[data-pressed] .word-label {
+  transform: scale(0.97);
+}
+
+.word-detail {
+  font-size: clamp(12px, 3.6cqw, 15px);
+  line-height: 1.3;
+  font-weight: 500;
+  letter-spacing: 0.01em;
+  color: var(--if-ink-dim);
+}
+
+/* Underneath an open panel the menu recedes; in the game it hides entirely. */
+.menu {
+  transition: opacity 240ms var(--if-ease-out);
+}
+
+.menu[data-covered] {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.menu[data-hidden] {
+  display: none;
+}
+
+/* ---------------------------------------------------------------------------
+ * Panels: any screen stacked over the menu or the game
+ * ------------------------------------------------------------------------- */
+
+.panel {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  grid-template-rows: auto 1fr;
+  padding:
+    calc(6cqh + var(--if-safe-top))
+    calc(7cqw + var(--if-safe-right))
+    calc(7cqh + var(--if-safe-bottom))
+    calc(7cqw + var(--if-safe-left));
+  pointer-events: auto;
+  opacity: 0;
+  transform: translateY(8px);
+  transition:
+    opacity 280ms var(--if-ease-out),
+    transform 280ms var(--if-ease-out);
+}
+
+.panel[data-in] {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.panel[data-out] {
+  pointer-events: none;
+  transition-duration: 200ms;
+}
+
+.panel[data-covered] {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.panel-scrim {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background:
+    linear-gradient(
+      to top,
+      rgb(7 10 16 / 0.94) 0%,
+      rgb(7 10 16 / 0.86) 55%,
+      rgb(7 10 16 / 0.72) 100%
+    );
+}
+
+.panel-head {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 3cqw;
+  margin: 0 0 4cqh 0;
+}
+
+.panel-title {
+  margin: 0;
+  font-family: var(--if-display);
+  font-optical-sizing: auto;
+  font-size: clamp(22px, 8cqw, 42px);
+  line-height: 1.02;
+  font-weight: 700;
+  letter-spacing: -0.025em;
+  color: var(--if-ink);
+}
+
+.back {
+  flex: none;
+  width: 11cqw;
+  height: 11cqw;
+  margin-left: -2.5cqw;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--if-gold);
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  outline: none;
+  transition:
+    background-color 160ms ease,
+    color 160ms ease,
+    transform 120ms var(--if-ease-out);
+}
+
+.back > svg {
+  width: 55%;
+  height: 55%;
+}
+
+.back[data-pressed] {
+  background: var(--if-gold);
+  color: var(--if-stage);
+  transform: scale(0.94);
+}
+
+.back:focus-visible {
+  box-shadow: 0 0 0 2px rgb(212 175 55 / 0.5);
+}
+
+.panel-body {
+  position: relative;
+  min-height: 0;
+  display: grid;
+  align-content: start;
+}
+
+/* ---------------------------------------------------------------------------
+ * Loading
+ * ------------------------------------------------------------------------- */
+
+.loading {
+  grid-template-rows: 1fr auto;
+}
+
+.loading-copy {
+  position: relative;
+  grid-row: 2;
+  display: grid;
+  gap: 2.4cqh;
+}
+
+.loading-title {
+  margin: 0;
+  font-family: var(--if-display);
+  font-optical-sizing: auto;
+  font-size: clamp(22px, 8cqw, 42px);
+  line-height: 1.02;
+  font-weight: 700;
+  letter-spacing: -0.025em;
+  color: var(--if-ink);
+}
+
+.meter {
+  position: relative;
+  height: 2px;
+  background: rgb(242 236 220 / 0.14);
+  overflow: hidden;
+}
+
+.meter-fill {
+  position: absolute;
+  inset: 0;
+  background: var(--if-gold);
+  transform: scaleX(0);
+  transform-origin: 0 50%;
+  transition: transform 260ms var(--if-ease-out);
+}
+
+.loading-status {
+  margin: 0;
+  font-family: var(--if-display);
+  font-optical-sizing: auto;
+  font-size: clamp(13px, 4cqw, 17px);
+  line-height: 1.3;
+  font-weight: 500;
+  letter-spacing: 0.01em;
+  color: var(--if-gold-soft);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---------------------------------------------------------------------------
+ * Save slots
+ * ------------------------------------------------------------------------- */
+
+.slot-list {
+  display: grid;
+  gap: 2cqh;
+}
+
+.slot {
+  position: relative;
+  display: grid;
+  grid-template-columns: 18cqw 1fr;
+  gap: 4cqw;
+  align-items: center;
+  width: 100%;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--if-ink);
+  text-align: left;
+  cursor: pointer;
+  outline: none;
+  opacity: 0;
+  transform: translateY(10px);
+  transition:
+    opacity 360ms var(--if-ease-out) calc(var(--i, 0) * 50ms),
+    transform 360ms var(--if-ease-out) calc(var(--i, 0) * 50ms);
+}
+
+[data-in] .slot {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.slot[aria-disabled="true"] {
+  cursor: default;
+}
+
+.slot-thumb {
+  position: relative;
+  aspect-ratio: 9 / 16;
+  border-radius: 4px;
+  overflow: hidden;
+  background: rgb(242 236 220 / 0.06);
+  box-shadow: inset 0 0 0 1px rgb(242 236 220 / 0.12);
+  transition:
+    box-shadow 160ms ease,
+    transform 120ms var(--if-ease-out);
+}
+
+.slot-thumb > img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.slot-text {
+  display: grid;
+  gap: 0.8cqh;
+  min-width: 0;
+}
+
+.slot-name {
+  font-family: var(--if-display);
+  font-optical-sizing: auto;
+  font-size: clamp(18px, 6cqw, 30px);
+  line-height: 1.05;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  color: var(--if-ink);
+  transition: color 160ms ease;
+}
+
+.slot[data-empty] .slot-name {
+  color: var(--if-ink-dim);
+}
+
+.slot-meta {
+  font-family: var(--if-display);
+  font-optical-sizing: auto;
+  font-size: clamp(12px, 3.6cqw, 15px);
+  line-height: 1.3;
+  font-weight: 500;
+  letter-spacing: 0.01em;
+  color: var(--if-ink-dim);
+  font-variant-numeric: tabular-nums;
+}
+
+.slot:not([aria-disabled="true"]):focus-visible .slot-thumb,
+.slot:not([aria-disabled="true"])[data-pressed] .slot-thumb {
+  box-shadow: inset 0 0 0 1.5px var(--if-gold);
+}
+
+.slot:not([aria-disabled="true"]):focus-visible .slot-name,
+.slot:not([aria-disabled="true"])[data-pressed] .slot-name {
+  color: var(--if-gold-soft);
+}
+
+.slot[data-pressed] .slot-thumb {
+  transform: scale(0.96);
+}
+
+.slot[data-saved] .slot-name {
+  color: var(--if-gold);
+}
+
+/* ---------------------------------------------------------------------------
+ * Progress map
+ * ------------------------------------------------------------------------- */
+
+.progress-summary {
+  margin: 0 0 3cqh 0;
+  font-family: var(--if-display);
+  font-optical-sizing: auto;
+  font-size: clamp(13px, 4cqw, 17px);
+  line-height: 1.35;
+  font-weight: 500;
+  letter-spacing: 0.01em;
+  color: var(--if-gold-soft);
+  font-variant-numeric: tabular-nums;
+  max-width: 34ch;
+}
+
+.map-scroll {
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+  scrollbar-color: rgb(212 175 55 / 0.4) transparent;
+  mask-image: linear-gradient(to bottom, transparent 0, #000 12px, #000 calc(100% - 20px), transparent 100%);
+}
+
+.map {
+  display: block;
+  width: 100%;
+  height: auto;
+  overflow: visible;
+}
+
+.map-edges path {
+  fill: none;
+  stroke-width: 1.25;
+  stroke-linecap: round;
+}
+
+.map-edges .is-seen {
+  stroke: var(--if-gold);
+  stroke-opacity: 0.85;
+}
+
+.map-edges .is-frontier {
+  stroke: var(--if-gold);
+  stroke-opacity: 0.35;
+  stroke-dasharray: 3 4;
+}
+
+.map-edges .is-fog {
+  stroke: var(--if-ink);
+  stroke-opacity: 0.1;
+}
+
+.map-shape {
+  fill: var(--if-stage);
+  stroke-width: 1.5;
+}
+
+.map-node.is-seen .map-shape {
+  fill: var(--if-gold);
+  stroke: var(--if-gold);
+}
+
+.map-node.is-seen.kind-ending .map-shape {
+  fill: var(--if-stage);
+}
+
+.map-node.is-seen .map-core {
+  fill: var(--if-gold);
+}
+
+.map-node.is-seen.kind-defeat .map-shape {
+  fill: var(--if-stage);
+}
+
+.map-cross {
+  fill: none;
+  stroke: transparent;
+  stroke-width: 1.5;
+  stroke-linecap: round;
+}
+
+.map-node.is-seen .map-cross {
+  stroke: var(--if-gold);
+}
+
+.map-node.is-frontier .map-shape {
+  fill: var(--if-stage);
+  stroke: var(--if-gold);
+  stroke-opacity: 0.6;
+}
+
+.map-node.is-frontier .map-core {
+  fill: transparent;
+}
+
+.map-node.is-fog .map-shape {
+  fill: rgb(242 236 220 / 0.08);
+  stroke: rgb(242 236 220 / 0.14);
+}
+
+.map-node.is-fog .map-core {
+  fill: transparent;
+}
+
+.map-halo {
+  fill: none;
+  stroke: var(--if-gold);
+  stroke-width: 1;
+  stroke-opacity: 0.6;
+  animation: halo 2400ms var(--if-ease-in-out) infinite;
+  transform-origin: center;
+  transform-box: fill-box;
+}
+
+@keyframes halo {
+  0%,
+  100% {
+    stroke-opacity: 0.25;
+    transform: scale(0.92);
+  }
+  50% {
+    stroke-opacity: 0.7;
+    transform: scale(1.04);
+  }
+}
+
+.map-label {
+  font-family: var(--if-display);
+  font-optical-sizing: auto;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.005em;
+  fill: var(--if-ink);
+}
+
+.map-node.is-frontier .map-label {
+  fill: var(--if-ink-dim);
+  font-weight: 500;
+}
+
+/* ---------------------------------------------------------------------------
+ * Game and pause
+ * ------------------------------------------------------------------------- */
+
+.game {
+  position: absolute;
+  inset: 0;
+  pointer-events: auto;
+  outline: none;
+  opacity: 0;
+  transition: opacity 400ms var(--if-ease-out);
+}
+
+.game[data-in] {
+  opacity: 1;
+}
+
+.pause-button {
+  position: absolute;
+  top: calc(4cqh + var(--if-safe-top));
+  right: calc(5cqw + var(--if-safe-right));
+  width: 12cqw;
+  height: 12cqw;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: rgb(7 10 16 / 0.55);
+  box-shadow: inset 0 0 0 1px rgb(212 175 55 / 0.55);
+  color: var(--if-gold);
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  outline: none;
+  opacity: 0;
+  transform: scale(0.94);
+  pointer-events: none;
+  transition:
+    opacity 200ms var(--if-ease-out),
+    transform 200ms var(--if-ease-out),
+    background-color 160ms ease,
+    color 160ms ease;
+}
+
+.pause-button > svg {
+  width: 44%;
+  height: 44%;
+}
+
+.pause-button[data-shown],
+.pause-button:focus-visible {
+  opacity: 1;
+  transform: scale(1);
+  pointer-events: auto;
+}
+
+.pause-button[data-pressed] {
+  background: var(--if-gold);
+  color: var(--if-stage);
+  transform: scale(0.92);
+}
+
+.game[data-covered] .pause-button,
+.game[data-choosing] .pause-button,
+.game[data-qte] .pause-button {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.defeat .pause-head {
+  color: var(--if-ink);
+}
+
+/* ---------------------------------------------------------------------------
+ * Quick-time event
+ * A tap mark low on the scene with a ring around it. Taps fill the ring, the
+ * ring drains when they stop. The clip keeps playing underneath.
+ * ------------------------------------------------------------------------- */
+
+.qte {
+  position: absolute;
+  inset: 0;
+  pointer-events: auto;
+  outline: none;
+  cursor: pointer;
+}
+
+.qte-mark {
+  position: absolute;
+  left: 50%;
+  bottom: calc(16cqh + var(--if-safe-bottom));
+  width: 30cqw;
+  height: 30cqw;
+  opacity: 0;
+  transform: translateX(-50%) scale(0.9);
+  transition:
+    opacity 300ms var(--if-ease-out),
+    transform 300ms var(--if-ease-out);
+}
+
+/* A dark disc under the mark keeps it legible on any frame. No filters. */
+.qte-mark::before {
+  content: "";
+  position: absolute;
+  inset: 5%;
+  border-radius: 50%;
+  background: rgb(7 10 16 / 0.42);
+}
+
+.qte[data-in] .qte-mark {
+  opacity: 1;
+  transform: translateX(-50%) scale(1);
+}
+
+.qte[data-held] .qte-mark {
+  opacity: 0.55;
+}
+
+.qte-ring {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  transform: rotate(-90deg);
+}
+
+.qte-track,
+.qte-fill {
+  fill: none;
+  stroke-width: 3;
+}
+
+.qte-track {
+  stroke: rgb(242 236 220 / 0.18);
+}
+
+.qte-fill {
+  stroke: var(--if-gold);
+  stroke-dasharray: 1;
+  stroke-dashoffset: 1;
+}
+
+.qte-icon {
+  position: absolute;
+  inset: 22%;
+  color: var(--if-ink);
+  transform: scale(1);
+  transition: color 200ms ease;
+}
+
+.qte-icon > svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2.6;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.qte-ripple {
+  opacity: 0.55;
+}
+
+.qte-ripple-inner {
+  opacity: 0.85;
+}
+
+/* Every tap: the mark gives and springs back. Restarted from the top per tap. */
+.qte-icon[data-tap] {
+  animation: qte-tap 160ms var(--if-ease-out);
+}
+
+@keyframes qte-tap {
+  from {
+    transform: scale(0.84);
+  }
+  to {
+    transform: scale(1);
+  }
+}
+
+/*
+ * Past the threshold: the mark turns gold and the ring brightens. It stays;
+ * the fight is not over until the clip is, and the ring keeps draining.
+ */
+.qte[data-full] .qte-icon {
+  color: var(--if-gold-soft);
+}
+
+.qte[data-full] .qte-track {
+  stroke: rgb(212 175 55 / 0.35);
+}
+
+.qte[data-full] .qte-mark::before {
+  background: rgb(7 10 16 / 0.6);
+  box-shadow: inset 0 0 0 1px rgb(212 175 55 / 0.45);
+}
+
+.qte-mark::before,
+.qte-track {
+  transition:
+    background-color 200ms ease,
+    box-shadow 200ms ease,
+    stroke 200ms ease;
+}
+
+/* ---------------------------------------------------------------------------
+ * Choice
+ * The frozen frame splits corner to corner. Each half is a button carrying its
+ * own copy of the frame, clipped to its side of the crack, so it can grow and
+ * take its colour on its own. Gold upper right, silver lower left.
+ * ------------------------------------------------------------------------- */
+
+.choice {
+  --choice-silver: #cfd6e0;
+  --choice-silver-soft: #e4e9f0;
+  --choice-shift: 0.7cqw;
+  position: absolute;
+  inset: 0;
+  background: var(--if-ground);
+  pointer-events: auto;
+}
+
+.choice-half {
+  position: absolute;
+  inset: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  outline: none;
+  overflow: hidden;
+  -webkit-tap-highlight-color: transparent;
+  transform: translate(0, 0) scale(1);
+  transition:
+    transform 260ms var(--if-ease-out),
+    opacity 220ms var(--if-ease-out);
+  will-change: transform;
+}
+
+.choice-half[data-side="upper"] {
+  transform-origin: 100% 0;
+}
+
+.choice-half[data-side="lower"] {
+  transform-origin: 0 100%;
+}
+
+/* The split: the halves part along the crack and the ground shows between. */
+.choice[data-in] .choice-half[data-side="upper"] {
+  transform: translate(var(--choice-shift), calc(var(--choice-shift) * -1)) scale(1);
+}
+
+.choice[data-in] .choice-half[data-side="lower"] {
+  transform: translate(calc(var(--choice-shift) * -1), var(--choice-shift)) scale(1);
+}
+
+/* Hover, press, focus: the half grows into the crack. */
+.choice[data-in] .choice-half[data-side="upper"][data-active],
+.choice[data-in] .choice-half[data-side="upper"]:focus-visible {
+  transform: translate(var(--choice-shift), calc(var(--choice-shift) * -1)) scale(1.035);
+  transition-duration: 180ms;
+}
+
+.choice[data-in] .choice-half[data-side="lower"][data-active],
+.choice[data-in] .choice-half[data-side="lower"]:focus-visible {
+  transform: translate(calc(var(--choice-shift) * -1), var(--choice-shift)) scale(1.035);
+  transition-duration: 180ms;
+}
+
+.choice[data-in] .choice-half[data-pressed] {
+  transition-duration: 120ms;
+}
+
+/* Commit: the chosen half swells, the other gives way. */
+.choice[data-in] .choice-half[data-side="upper"][data-chosen] {
+  transform: translate(var(--choice-shift), calc(var(--choice-shift) * -1)) scale(1.06);
+  transition-duration: 220ms;
+}
+
+.choice[data-in] .choice-half[data-side="lower"][data-chosen] {
+  transform: translate(calc(var(--choice-shift) * -1), var(--choice-shift)) scale(1.06);
+  transition-duration: 220ms;
+}
+
+.choice-half[data-lost] {
+  opacity: 0.45;
+  transform: translate(0, 0) scale(0.985);
+  transition-duration: 220ms;
+}
+
+.choice-frame {
+  position: absolute;
+  inset: 0;
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  pointer-events: none;
+}
+
+/* Colour: the frame is re-coloured, not covered. */
+.choice-tint {
+  position: absolute;
+  inset: 0;
+  background: var(--if-gold);
+  mix-blend-mode: color;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 180ms ease;
+}
+
+.choice-half[data-side="lower"] .choice-tint {
+  background: var(--choice-silver);
+}
+
+.choice-half[data-active] .choice-tint,
+.choice-half:focus-visible .choice-tint {
+  opacity: 0.85;
+}
+
+.choice-half[data-chosen] .choice-tint {
+  opacity: 1;
+}
+
+.choice-half[data-lost] .choice-tint {
+  opacity: 0;
+}
+
+/* The option, set beside the crack on its own side. */
+.choice-label {
+  position: absolute;
+  max-width: 54cqw;
+  font-family: var(--if-display);
+  font-optical-sizing: auto;
+  font-size: clamp(24px, 9.5cqw, 52px);
+  line-height: 1;
+  font-weight: 700;
+  letter-spacing: -0.03em;
+  color: var(--if-ink);
+  text-shadow:
+    0 2px 6px rgb(7 10 16 / 0.6),
+    0 8px 32px rgb(7 10 16 / 0.7);
+  text-wrap: balance;
+  pointer-events: none;
+  opacity: 0;
+  transform: translateY(8px);
+  transition:
+    color 160ms ease,
+    opacity 320ms var(--if-ease-out) 220ms,
+    transform 320ms var(--if-ease-out) 220ms;
+}
+
+.choice-half[data-side="upper"] .choice-label {
+  left: 38cqw;
+  top: calc(16cqh + var(--if-safe-top));
+  text-align: left;
+}
+
+.choice-half[data-side="lower"] .choice-label {
+  right: 38cqw;
+  bottom: calc(16cqh + var(--if-safe-bottom));
+  text-align: right;
+}
+
+.choice[data-in] .choice-label {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.choice-half[data-side="upper"][data-active] .choice-label,
+.choice-half[data-side="upper"]:focus-visible .choice-label,
+.choice-half[data-side="upper"][data-chosen] .choice-label {
+  color: var(--if-gold-soft);
+}
+
+.choice-half[data-side="lower"][data-active] .choice-label,
+.choice-half[data-side="lower"]:focus-visible .choice-label,
+.choice-half[data-side="lower"][data-chosen] .choice-label {
+  color: var(--choice-silver-soft);
+}
+
+.choice-half[data-lost] .choice-label {
+  opacity: 0.5;
+}
+
+/*
+ * The crack: each half draws its own edge along the split, clipped to its
+ * side, so the edge travels with the half. It draws itself corner to corner
+ * on entry and takes the half's colour when the half is live.
+ */
+.choice-crack {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+  pointer-events: none;
+}
+
+.choice-edge {
+  fill: none;
+  vector-effect: non-scaling-stroke;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+  stroke: var(--if-ink);
+  stroke-width: 2px;
+  opacity: 0.55;
+  stroke-dasharray: 1;
+  stroke-dashoffset: 1;
+  transition:
+    stroke-dashoffset 420ms var(--if-ease-out),
+    stroke 160ms ease,
+    opacity 160ms ease;
+}
+
+.choice[data-in] .choice-edge {
+  stroke-dashoffset: 0;
+}
+
+.choice-half[data-side="upper"][data-active] .choice-edge,
+.choice-half[data-side="upper"]:focus-visible .choice-edge,
+.choice-half[data-side="upper"][data-chosen] .choice-edge {
+  stroke: var(--if-gold);
+  opacity: 1;
+}
+
+.choice-half[data-side="lower"][data-active] .choice-edge,
+.choice-half[data-side="lower"]:focus-visible .choice-edge,
+.choice-half[data-side="lower"][data-chosen] .choice-edge {
+  stroke: var(--choice-silver);
+  opacity: 1;
+}
+
+.choice-half[data-lost] .choice-edge {
+  opacity: 0.3;
+}
+
+/* The clock: a gold bar across the top that runs down to nothing. */
+.choice-clock {
+  position: absolute;
+  top: var(--if-safe-top);
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: rgb(242 236 220 / 0.14);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 200ms var(--if-ease-out) 300ms;
+}
+
+.choice-clock-fill {
+  position: absolute;
+  inset: 0;
+  background: var(--if-gold);
+  transform-origin: 0 50%;
+}
+
+.choice[data-in] .choice-clock {
+  opacity: 1;
+}
+
+.choice[data-chosen] .choice-clock {
+  opacity: 0;
+  transition-delay: 0ms;
+}
+
+.pause {
+  grid-template-rows: auto 1fr auto;
+}
+
+.pause-head {
+  position: relative;
+  margin: 0;
+  font-family: var(--if-display);
+  font-optical-sizing: auto;
+  font-size: clamp(13px, 4cqw, 17px);
+  line-height: 1.3;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  color: var(--if-ink-dim);
+}
+
+.pause .words {
+  grid-row: 3;
+}
+
+/* Browser surfaces carry the palette too. */
+::selection {
+  background: rgb(212 175 55 / 0.28);
+  color: #fff8e1;
+}
+
+/*
+ * Mobile: the stage is the screen.
+ * Portrait phones and any narrow viewport drop the well, radius, and hairline.
+ */
+@media (max-width: 767px), (orientation: portrait) and (max-width: 1023px) {
+  .ground {
+    background: var(--if-stage);
+  }
+
+  .well {
+    padding: 0;
+  }
+
+  .stage {
+    aspect-ratio: auto;
+    width: 100%;
+    height: 100%;
+    max-width: none;
+    max-height: none;
+    border-radius: 0;
+    box-shadow: none;
+  }
+
+  .stage::after {
+    display: none;
+  }
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .start:hover .start-mark {
+    animation: none;
+    opacity: 1;
+    background: var(--if-gold);
+    color: var(--if-stage);
+  }
+
+  .word:not([aria-disabled="true"]):hover::before {
+    transform: scaleX(1);
+  }
+
+  .word:not([aria-disabled="true"]):hover {
+    color: var(--if-gold-soft);
+  }
+
+  .back:hover {
+    background: rgb(212 175 55 / 0.14);
+  }
+
+  .slot:not([aria-disabled="true"]):hover .slot-thumb {
+    box-shadow: inset 0 0 0 1.5px var(--if-gold);
+  }
+
+  .slot:not([aria-disabled="true"]):hover .slot-name {
+    color: var(--if-gold-soft);
+  }
+
+  .pause-button:hover {
+    opacity: 1;
+    transform: scale(1);
+    pointer-events: auto;
+    background: rgb(212 175 55 / 0.18);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .stage::after {
+    transition-duration: 1ms;
+  }
+
+  .start-mark {
+    animation: none;
+    opacity: 1;
+  }
+
+  .start-blur > img {
+    transition-duration: 300ms;
+  }
+
+  .start[data-leaving] .start-copy {
+    transform: none;
+  }
+
+  .start[data-pressed] .start-mark {
+    transform: none;
+  }
+
+  .menu-head,
+  .word,
+  .slot,
+  .panel,
+  .pause-button {
+    transform: none;
+    transition-duration: 200ms;
+    transition-delay: 0ms;
+  }
+
+  [data-in] .word,
+  [data-in] .slot,
+  .panel[data-in] {
+    transform: none;
+  }
+
+  .word[data-pressed] .word-label,
+  .slot[data-pressed] .slot-thumb {
+    transform: none;
+  }
+
+  .map-halo {
+    animation: none;
+  }
+
+  .screen > video {
+    transition-duration: 200ms;
+  }
+
+  /* The choice still splits and colours; nothing moves. */
+  .choice {
+    --choice-shift: 0px;
+  }
+
+  .choice[data-in] .choice-half,
+  .choice[data-in] .choice-half[data-active],
+  .choice[data-in] .choice-half[data-chosen],
+  .choice-half[data-lost] {
+    transform: none;
+    transition-duration: 0ms;
+  }
+
+  .choice-label {
+    transform: none;
+    transition-delay: 0ms;
+  }
+
+  .choice-edge {
+    stroke-dashoffset: 0;
+    transition-duration: 0ms;
+  }
+
+  .qte-mark,
+  .qte[data-in] .qte-mark {
+    transform: translateX(-50%);
+    transition-duration: 0ms;
+  }
+
+  .qte-icon[data-tap] {
+    animation: none;
+  }
+}
+
+@media (prefers-reduced-transparency: reduce) {
+  .start-scrim,
+  .menu-scrim,
+  .panel-scrim {
+    background: rgb(7 10 16 / 0.92);
+  }
+
+  .pause-button {
+    background: rgb(7 10 16 / 0.9);
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+  }
+}

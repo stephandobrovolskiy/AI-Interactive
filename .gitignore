@@ -1,0 +1,8 @@
+node_modules
+dist
+site
+.impeccable/live
+# The raw menu loop; the page uses menu-web.mp4.
+public/menu.mp4
+.claude/settings.local.json
+.impeccable/hook.cache.json
